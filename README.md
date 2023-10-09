@@ -15,7 +15,7 @@
 然后执行:
 
 ```shell
-./gradlew assembleRelease
+./gradlew assembleDebug
 ```
 
 得到的 APK 位于 `app/build/outputs/apk/release/lumika-${version}-${ABI}.apk`.
