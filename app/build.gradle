@@ -1,0 +1,70 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'com.weclont.lumika'
+    compileSdk 33
+
+    defaultConfig {
+        applicationId "com.weclont.lumika"
+        minSdk 24
+        targetSdk 33
+        versionCode 2
+        versionName "3.9.1"
+
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+
+        splits {
+            abi {
+                enable true
+                reset()
+                //在这里添加需要生成的架构
+                include 'armeabi-v7a','arm64-v8a', "x86", "x86_64"
+                //是否生成统一的包
+                universalApk true
+            }
+        }
+        applicationVariants.all { variant ->
+            variant.outputs.all {
+                output->
+                    //获取ABI类型
+                    def abiName = output.getFilter(output.ABI)
+                    if(abiName==null){
+                        abiName="universal"
+                    }
+                    outputFileName = "lumika-${variant.versionName}-${abiName}.apk"
+
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+
+    sourceSets {
+        main {
+            jniLibs.srcDirs = ['src/main/libs']
+        }
+    }
+
+}
+
+dependencies {
+    implementation 'androidx.appcompat:appcompat:1.4.1'
+    implementation 'com.google.android.material:material:1.5.0'
+    implementation 'androidx.constraintlayout:constraintlayout:2.1.3'
+    testImplementation 'junit:junit:4.13.2'
+    androidTestImplementation 'androidx.test.ext:junit:1.1.3'
+    androidTestImplementation 'androidx.test.espresso:espresso-core:3.4.0'
+    implementation 'com.jaredrummler:ktsh:1.0.0'
+    implementation fileTree(dir: "$buildDir/native-libs", include: 'native-libs.jar')
+}
