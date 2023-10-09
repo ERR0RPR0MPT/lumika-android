@@ -10,7 +10,7 @@
 
 请在 `src/main/libs/{abi}` 目录下放置静态编译的 `liblumika.so`, `libffmpeg.so` 和 `libffprobe.so` 三个库.
 
-`liblumika.so` 只需将对应架构的 Lumika 可执行文件重命名即可, 静态编译的 `ffmpeg` 可执行文件请搜寻 `Google`.
+`liblumika.so` 只需将对应架构的 Lumika 可执行文件重命名即可, 静态编译的 `ffmpeg` 可执行文件请搜寻 `Google` ~~也可以直接从 Releases 的安装包里面拿~~ .
 
 然后执行:
 

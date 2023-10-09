@@ -12,8 +12,6 @@ import android.util.Log;
 import androidx.annotation.Nullable;
 import androidx.core.app.NotificationCompat;
 
-import com.jaredrummler.ktsh.Shell;
-
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
@@ -21,7 +19,7 @@ import java.io.InputStreamReader;
 public class ExecutableService extends Service {
     private static final int NOTIFICATION_ID = 1;
     private static final String CHANNEL_ID = "LumikaExecutableServiceChannel";
-    private Thread t;
+    private Thread lumikaCoreThread;
 
     @Override
     public void onCreate() {
@@ -35,14 +33,14 @@ public class ExecutableService extends Service {
         startForeground(NOTIFICATION_ID, buildNotification());
         int p = intent.getIntExtra("port", 7860);
         LumikaExecutableTask task = new LumikaExecutableTask(p);
-        t = new Thread(task);
-        t.start();
+        lumikaCoreThread = new Thread(task);
+        lumikaCoreThread.start();
         return START_STICKY;
     }
 
     public class LumikaExecutableTask implements Runnable {
 
-        private int port;
+        private final int port;
 
         public LumikaExecutableTask(int port) {
             this.port = port;
@@ -66,14 +64,9 @@ public class ExecutableService extends Service {
 
             String line;
             while ((line = reader.readLine()) != null) {
-                // 输出日志到控制台
                 Log.e("Lumika", line);
             }
-
-            // 等待命令执行完成
             int exitCode = process.waitFor();
-
-            // 打印命令的退出码
             Log.e("Lumika", "Exit Code: " + exitCode);
         } catch (IOException | InterruptedException e) {
             e.printStackTrace();

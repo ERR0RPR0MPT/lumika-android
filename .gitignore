@@ -9,6 +9,7 @@
 .cxx
 local.properties
 
+/static
 /app/build
 /app/src/main/libs/armeabi-v7a/*
 /app/src/main/libs/x86/*
