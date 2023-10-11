@@ -1,5 +1,6 @@
 package com.weclont.lumika;
 
+import android.app.Activity;
 import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
@@ -8,13 +9,18 @@ import android.content.Intent;
 import android.os.Build;
 import android.os.IBinder;
 import android.util.Log;
+import android.webkit.WebSettings;
 
 import androidx.annotation.Nullable;
 import androidx.core.app.NotificationCompat;
 
-import java.io.BufferedReader;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
 import java.io.IOException;
-import java.io.InputStreamReader;
+import java.io.InputStream;
+
+import fi.iki.elonen.NanoHTTPD;
 
 public class ExecutableService extends Service {
     private static final int NOTIFICATION_ID = 1;
@@ -53,24 +59,12 @@ public class ExecutableService extends Service {
     }
 
     public void startExecutable(int port) {
-        try {
-            String executablePath = getApplicationInfo().nativeLibraryDir;
-            String command = String.format("%s/liblumika.so web -p %s -d %s", executablePath, port, getFilesDir().getAbsolutePath());
-            Log.e("Lumika", "startExecutable: 开始运行: " + command);
+        String executablePath = getApplicationInfo().nativeLibraryDir;
+        String ffmpegPath = executablePath + "/libffmpeg.so";
+        String ffprobePath = executablePath + "/libffprobe.so";
 
-            Runtime runtime = Runtime.getRuntime();
-            Process process = runtime.exec(command);
-            BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
-
-            String line;
-            while ((line = reader.readLine()) != null) {
-                Log.e("Lumika", line);
-            }
-            int exitCode = process.waitFor();
-            Log.e("Lumika", "Exit Code: " + exitCode);
-        } catch (IOException | InterruptedException e) {
-            e.printStackTrace();
-        }
+        Log.e("Lumika", "startExecutable: 开始运行");
+        mobile.Mobile.startWebServer(port, getFilesDir().getAbsolutePath(), ffmpegPath, ffprobePath);
     }
 
     private void createNotificationChannel() {

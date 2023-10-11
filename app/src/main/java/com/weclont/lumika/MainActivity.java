@@ -2,14 +2,20 @@ package com.weclont.lumika;
 
 import android.annotation.SuppressLint;
 import android.app.Activity;
+import android.content.ContentValues;
+import android.content.Context;
 import android.content.Intent;
+import android.database.Cursor;
+import android.database.sqlite.SQLiteDatabase;
 import android.graphics.Color;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.util.Log;
 import android.view.View;
+import android.webkit.JavascriptInterface;
 import android.webkit.ValueCallback;
 import android.webkit.WebChromeClient;
 import android.webkit.WebResourceError;
@@ -25,8 +31,15 @@ import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsControllerCompat;
 
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
 import java.util.Objects;
 import java.util.Random;
+
+import fi.iki.elonen.NanoHTTPD;
 
 public class MainActivity extends AppCompatActivity {
     private static final String TAG = "LumikaMainActivity";
@@ -37,6 +50,9 @@ public class MainActivity extends AppCompatActivity {
     private Handler handler;
     private Runnable colorCheckRunnable;
     private String lastOneThemeColor = "#ffffff";
+    private LumikaWebServer webServer;
+    private int serverPort;
+    private int serverBackendPort;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -68,10 +84,12 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void initializeApp() {
-        int port = generateRandomNumber();
+        serverPort = 7859;
+        serverBackendPort = serverPort + 1;
 
-        startExecutableService(port);
-        setWebViewUrl(port);
+        startExecutableService(serverBackendPort);
+        startServer(serverPort);
+        setWebViewUrl(serverPort);
         startColorCheckThread();
     }
 
@@ -90,11 +108,15 @@ public class MainActivity extends AppCompatActivity {
 
     @SuppressLint("SetJavaScriptEnabled")
     private void setWebViewUrl(int port) {
+        webView.addJavascriptInterface(new LocalStorageJavaScriptInterface(getApplicationContext()), "LocalStorage");
+        LocalStorageJavaScriptInterface localStorageInterface = new LocalStorageJavaScriptInterface(MainActivity.this);
+        localStorageInterface.setItem("Lumika_API", "http://localhost:" + serverBackendPort + "/ui/");
         WebSettings websettings = webView.getSettings();
         websettings.setUseWideViewPort(true);
         websettings.setDomStorageEnabled(true);  // 开启 DOM storage 功能
         websettings.setAllowFileAccess(true);    // 可以读取文件缓存
         websettings.setJavaScriptEnabled(true);
+        websettings.setDatabaseEnabled(true);
 
         WebViewClient webViewClient = new WebViewClient() {
             @Override
@@ -135,17 +157,18 @@ public class MainActivity extends AppCompatActivity {
                 if (themeColor != null) {
                     setStatusBarColor(themeColor);
                 }
+                LocalStorageJavaScriptInterface localStorageInterface = new LocalStorageJavaScriptInterface(MainActivity.this);
+                localStorageInterface.setItem("Lumika_API", "http://localhost:7860/ui/");
             }
         };
         webView.setWebViewClient(webViewClient);
-
 
         wv = new WVChromeClient(this, MainActivity.this);
         webView.setWebChromeClient(wv);
 
         // 延迟后加载页面
         Handler handler = new Handler(Looper.getMainLooper());
-        handler.postDelayed(() -> loadWebView(port), 320);
+        handler.postDelayed(() -> loadWebView(port), 1);
     }
 
     private String getThemeColorFromMetaTags(WebView webView) {
@@ -213,6 +236,7 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onDestroy() {
         super.onDestroy();
+        stopServer();
         handler.removeCallbacks(colorCheckRunnable);
     }
 
@@ -233,6 +257,229 @@ public class MainActivity extends AppCompatActivity {
 
     private void loadWebView(int port) {
         webView.loadUrl("http://localhost:" + port + "/ui/");
+    }
+
+    // 开启NanoHTTPD服务器
+    private void startServer(int serverPort) {
+        copyAssetsDir2Phone(MainActivity.this, "ui");
+        String privateDirPath = getFilesDir().getAbsolutePath();
+        webServer = new LumikaWebServer(privateDirPath, serverPort);
+        try {
+            webServer.start();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+
+    /**
+     *  从assets目录中复制整个文件夹内容,考贝到 /data/data/包名/files/目录中
+     *  @param  activity  activity 使用CopyFiles类的Activity
+     *  @param  filePath  String  文件路径,如：/assets/aa
+     */
+    public static void copyAssetsDir2Phone(Activity activity, String filePath){
+        try {
+            String[] fileList = activity.getAssets().list(filePath);
+            if(fileList.length>0) {//如果是目录
+                File file=new File(activity.getFilesDir().getAbsolutePath()+ File.separator+filePath);
+                file.mkdirs();//如果文件夹不存在，则递归
+                for (String fileName:fileList){
+                    filePath=filePath+File.separator+fileName;
+
+                    copyAssetsDir2Phone(activity,filePath);
+
+                    filePath=filePath.substring(0,filePath.lastIndexOf(File.separator));
+                    Log.e("oldPath",filePath);
+                }
+            } else {//如果是文件
+                InputStream inputStream=activity.getAssets().open(filePath);
+                File file=new File(activity.getFilesDir().getAbsolutePath()+ File.separator+filePath);
+                Log.i("copyAssets2Phone","file:"+file);
+                if(!file.exists() || file.length()==0) {
+                    FileOutputStream fos=new FileOutputStream(file);
+                    int len=-1;
+                    byte[] buffer=new byte[1024];
+                    while ((len=inputStream.read(buffer))!=-1){
+                        fos.write(buffer,0,len);
+                    }
+                    fos.flush();
+                    inputStream.close();
+                    fos.close();
+                    Log.e("", "copyAssetsDir2Phone: 文件复制完毕");
+                } else {
+                    Log.e("", "copyAssetsDir2Phone: 文件已存在，无需复制");
+                }
+            }
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+
+    /**
+     * 将文件从assets目录，考贝到 /data/data/包名/files/ 目录中。assets 目录中的文件，会不经压缩打包至APK包中，使用时还应从apk包中导出来
+     * @param fileName 文件名,如aaa.txt
+     */
+    public static void copyAssetsFile2Phone(Activity activity, String fileName){
+        try {
+            InputStream inputStream = activity.getAssets().open(fileName);
+            //getFilesDir() 获得当前APP的安装路径 /data/data/包名/files 目录
+            File file = new File(activity.getFilesDir().getAbsolutePath() + File.separator + fileName);
+            if(!file.exists() || file.length()==0) {
+                FileOutputStream fos =new FileOutputStream(file);//如果文件不存在，FileOutputStream会自动创建文件
+                int len=-1;
+                byte[] buffer = new byte[1024];
+                while ((len=inputStream.read(buffer))!=-1){
+                    fos.write(buffer,0,len);
+                }
+                fos.flush();//刷新缓存区
+                inputStream.close();
+                fos.close();
+                Log.e("", "copyAssetsDir2Phone: 文件复制完毕");
+            } else {
+                Log.e("", "copyAssetsDir2Phone: 文件已存在，无需复制");
+            }
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+
+    // 停止服务器
+    private void stopServer() {
+        if (webServer != null) {
+            webServer.stop();
+        }
+    }
+
+    private static class LumikaWebServer extends NanoHTTPD {
+
+        private final String rootDir;
+
+        public LumikaWebServer(String rootDir, int port) {
+            super(port); // 传入0表示随机分配端口
+            this.rootDir = rootDir;
+        }
+
+        @Override
+        public Response serve(IHTTPSession session) {
+            String uri = session.getUri();
+            String filePath;
+
+            // 处理以"/"结尾的URI，添加index.html到末尾
+            if (uri.endsWith("/")) {
+                filePath = rootDir + uri + "index.html";
+            } else {
+                filePath = rootDir + uri;
+            }
+
+            Log.e("", "serve: 当前准备访问：" + filePath);
+
+            File file = new File(filePath);
+
+            if (file.exists() && file.isFile()) {
+                try {
+                    FileInputStream fis = new FileInputStream(file);
+                    return newChunkedResponse(Response.Status.OK, getMimeTypeForFile(filePath), fis);
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+            }
+
+            return super.serve(session);
+        }
+    }
+
+    /**
+     * This class is used as a substitution of the local storage in Android webviews
+     *
+     * @author Diane
+     */
+    private static class LocalStorageJavaScriptInterface {
+        private final Context mContext;
+        private final LocalStorage localStorageDBHelper;
+        private SQLiteDatabase database;
+
+        LocalStorageJavaScriptInterface(Context c) {
+            mContext = c;
+            localStorageDBHelper = LocalStorage.getInstance(mContext);
+        }
+
+        /**
+         * This method allows to get an item for the given key
+         * @param key : the key to look for in the local storage
+         * @return the item having the given key
+         */
+        @JavascriptInterface
+        public String getItem(String key)
+        {
+            String value = null;
+            if(key != null)
+            {
+                database = localStorageDBHelper.getReadableDatabase();
+                Cursor cursor = database.query(LocalStorage.LOCALSTORAGE_TABLE_NAME,
+                        null,
+                        LocalStorage.LOCALSTORAGE_ID + " = ?",
+                        new String [] {key},null, null, null);
+                if(cursor.moveToFirst())
+                {
+                    value = cursor.getString(1);
+                }
+                cursor.close();
+                database.close();
+            }
+            return value;
+        }
+
+        /**
+         * set the value for the given key, or create the set of datas if the key does not exist already.
+         * @param key
+         * @param value
+         */
+        @JavascriptInterface
+        public void setItem(String key,String value)
+        {
+            if(key != null && value != null)
+            {
+                String oldValue = getItem(key);
+                database = localStorageDBHelper.getWritableDatabase();
+                ContentValues values = new ContentValues();
+                values.put(LocalStorage.LOCALSTORAGE_ID, key);
+                values.put(LocalStorage.LOCALSTORAGE_VALUE, value);
+                if(oldValue != null)
+                {
+                    database.update(LocalStorage.LOCALSTORAGE_TABLE_NAME, values, LocalStorage.LOCALSTORAGE_ID + "='" + key + "'", null);
+                }
+                else
+                {
+                    database.insert(LocalStorage.LOCALSTORAGE_TABLE_NAME, null, values);
+                }
+                database.close();
+            }
+        }
+
+        /**
+         * removes the item corresponding to the given key
+         * @param key
+         */
+        @JavascriptInterface
+        public void removeItem(String key)
+        {
+            if(key != null)
+            {
+                database = localStorageDBHelper.getWritableDatabase();
+                database.delete(LocalStorage.LOCALSTORAGE_TABLE_NAME, LocalStorage.LOCALSTORAGE_ID + "='" + key + "'", null);
+                database.close();
+            }
+        }
+
+        /**
+         * clears all the local storage.
+         */
+        @JavascriptInterface
+        public void clear()
+        {
+            database = localStorageDBHelper.getWritableDatabase();
+            database.delete(LocalStorage.LOCALSTORAGE_TABLE_NAME, null, null);
+            database.close();
+        }
     }
 
 }

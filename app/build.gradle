@@ -11,7 +11,7 @@ android {
         minSdk 24
         targetSdk 33
         versionCode 3
-        versionName "3.9.2"
+        versionName "3.11.0"
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
 
@@ -50,11 +50,11 @@ android {
         targetCompatibility JavaVersion.VERSION_1_8
     }
 
-    sourceSets {
-        main {
-            jniLibs.srcDirs = ['src/main/libs']
-        }
-    }
+//    sourceSets {
+//        main {
+//            jniLibs.srcDirs = ['src/main/libs']
+//        }
+//    }
 
 }
 
@@ -65,6 +65,7 @@ dependencies {
     testImplementation 'junit:junit:4.13.2'
     androidTestImplementation 'androidx.test.ext:junit:1.1.3'
     androidTestImplementation 'androidx.test.espresso:espresso-core:3.4.0'
-    implementation 'com.jaredrummler:ktsh:1.0.0'
-    implementation fileTree(dir: "$buildDir/native-libs", include: 'native-libs.jar')
+    implementation 'org.nanohttpd:nanohttpd:2.3.1'
+//    implementation fileTree(dir: "$buildDir/native-libs", include: 'native-libs.jar')
+    implementation(fileTree("libs"))
 }
