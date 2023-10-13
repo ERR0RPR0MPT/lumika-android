@@ -49,7 +49,7 @@ public class ExecutableService extends Service {
         LumikaExecutableTask task = new LumikaExecutableTask(p);
         lumikaCoreThread = new Thread(task);
         lumikaCoreThread.start();
-        return START_STICKY;
+        return START_NOT_STICKY;
     }
 
     @Override

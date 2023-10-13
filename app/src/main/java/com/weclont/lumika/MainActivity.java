@@ -10,12 +10,20 @@ import android.content.Intent;
 import android.database.Cursor;
 import android.database.sqlite.SQLiteDatabase;
 import android.graphics.Color;
+import android.hardware.display.DisplayManager;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.util.Log;
+import android.view.Display;
+import android.view.Surface;
+import android.view.SurfaceControl;
+import android.view.SurfaceHolder;
+import android.view.SurfaceView;
 import android.view.View;
+import android.view.WindowManager;
 import android.webkit.JavascriptInterface;
 import android.webkit.ValueCallback;
 import android.webkit.WebChromeClient;
@@ -26,6 +34,7 @@ import android.webkit.WebViewClient;
 
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
+import androidx.annotation.RequiresApi;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsControllerCompat;
@@ -42,6 +51,7 @@ import fi.iki.elonen.NanoHTTPD;
 
 public class MainActivity extends AppCompatActivity {
     private static final String TAG = "LumikaMainActivity";
+    private SurfaceView surfaceView;
     private WebView webView;
     private WVChromeClient wv = null;
     public ValueCallback<Uri[]> uploadFiles = null;
@@ -58,8 +68,35 @@ public class MainActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            surfaceView = findViewById(R.id.surfaceView);
+            surfaceView.getHolder().addCallback(new SurfaceHolder.Callback() {
+                @RequiresApi(api = Build.VERSION_CODES.R)
+                @Override
+                public void surfaceCreated(SurfaceHolder holder) {
+                    Surface surface = holder.getSurface();
+                    if (surface != null) {
+                        surface.setFrameRate(120.0f, Surface.FRAME_RATE_COMPATIBILITY_DEFAULT);
+                    }
+                }
+
+                @Override
+                public void surfaceChanged(SurfaceHolder holder, int format, int width, int height) {
+                    // Surface 改变时的处理
+                }
+
+                @Override
+                public void surfaceDestroyed(SurfaceHolder holder) {
+                    // Surface 销毁时的处理
+                }
+            });
+        }
+
         webView = findViewById(R.id.webView);
         webView.setLayerType(View.LAYER_TYPE_HARDWARE, null);
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
+            webView.setRendererPriorityPolicy(WebView.RENDERER_PRIORITY_IMPORTANT, true);
+        }
 
         handler = new Handler();
         colorCheckRunnable = new Runnable() {
@@ -280,42 +317,53 @@ public class MainActivity extends AppCompatActivity {
     }
 
     /**
-     *  从assets目录中复制整个文件夹内容,考贝到 /data/data/包名/files/目录中
-     *  @param  activity  activity 使用CopyFiles类的Activity
-     *  @param  filePath  String  文件路径,如：/assets/aa
+     * 从assets目录中复制整个文件夹内容,考贝到 /data/data/包名/files/目录中
+     *
+     * @param activity activity 使用CopyFiles类的Activity
+     * @param filePath String  文件路径,如：/assets/aa
      */
-    public static void copyAssetsDir2Phone(Activity activity, String filePath){
+    public static void copyAssetsDir2Phone(Activity activity, String filePath) {
         try {
             String[] fileList = activity.getAssets().list(filePath);
-            if(fileList.length>0) {//如果是目录
-                File file=new File(activity.getFilesDir().getAbsolutePath()+ File.separator+filePath);
+            if (fileList.length > 0) {//如果是目录
+                File file = new File(activity.getFilesDir().getAbsolutePath() + File.separator + filePath);
                 file.mkdirs();//如果文件夹不存在，则递归
-                for (String fileName:fileList){
-                    filePath=filePath+File.separator+fileName;
+                for (String fileName : fileList) {
+                    filePath = filePath + File.separator + fileName;
 
-                    copyAssetsDir2Phone(activity,filePath);
+                    copyAssetsDir2Phone(activity, filePath);
 
-                    filePath=filePath.substring(0,filePath.lastIndexOf(File.separator));
-                    Log.e("oldPath",filePath);
+                    filePath = filePath.substring(0, filePath.lastIndexOf(File.separator));
+                    Log.e("oldPath", filePath);
                 }
             } else {//如果是文件
-                InputStream inputStream=activity.getAssets().open(filePath);
-                File file=new File(activity.getFilesDir().getAbsolutePath()+ File.separator+filePath);
-                Log.i("copyAssets2Phone","file:"+file);
-                if(!file.exists() || file.length()==0) {
-                    FileOutputStream fos=new FileOutputStream(file);
-                    int len=-1;
-                    byte[] buffer=new byte[1024];
-                    while ((len=inputStream.read(buffer))!=-1){
-                        fos.write(buffer,0,len);
-                    }
-                    fos.flush();
-                    inputStream.close();
-                    fos.close();
-                    Log.e("", "copyAssetsDir2Phone: 文件复制完毕");
-                } else {
-                    Log.e("", "copyAssetsDir2Phone: 文件已存在，无需复制");
+                InputStream inputStream = activity.getAssets().open(filePath);
+                File file = new File(activity.getFilesDir().getAbsolutePath() + File.separator + filePath);
+                Log.i("copyAssets2Phone", "file:" + file);
+                FileOutputStream fos = new FileOutputStream(file);
+                int len = -1;
+                byte[] buffer = new byte[1024];
+                while ((len = inputStream.read(buffer)) != -1) {
+                    fos.write(buffer, 0, len);
                 }
+                fos.flush();
+                inputStream.close();
+                fos.close();
+                Log.e("", "copyAssetsDir2Phone: 文件复制完毕");
+//                if (!file.exists() || file.length() == 0) {
+//                    FileOutputStream fos = new FileOutputStream(file);
+//                    int len = -1;
+//                    byte[] buffer = new byte[1024];
+//                    while ((len = inputStream.read(buffer)) != -1) {
+//                        fos.write(buffer, 0, len);
+//                    }
+//                    fos.flush();
+//                    inputStream.close();
+//                    fos.close();
+//                    Log.e("", "copyAssetsDir2Phone: 文件复制完毕");
+//                } else {
+//                    Log.e("", "copyAssetsDir2Phone: 文件已存在，无需复制");
+//                }
             }
         } catch (IOException e) {
             e.printStackTrace();
@@ -324,27 +372,38 @@ public class MainActivity extends AppCompatActivity {
 
     /**
      * 将文件从assets目录，考贝到 /data/data/包名/files/ 目录中。assets 目录中的文件，会不经压缩打包至APK包中，使用时还应从apk包中导出来
+     *
      * @param fileName 文件名,如aaa.txt
      */
-    public static void copyAssetsFile2Phone(Activity activity, String fileName){
+    public static void copyAssetsFile2Phone(Activity activity, String fileName) {
         try {
             InputStream inputStream = activity.getAssets().open(fileName);
             //getFilesDir() 获得当前APP的安装路径 /data/data/包名/files 目录
             File file = new File(activity.getFilesDir().getAbsolutePath() + File.separator + fileName);
-            if(!file.exists() || file.length()==0) {
-                FileOutputStream fos =new FileOutputStream(file);//如果文件不存在，FileOutputStream会自动创建文件
-                int len=-1;
-                byte[] buffer = new byte[1024];
-                while ((len=inputStream.read(buffer))!=-1){
-                    fos.write(buffer,0,len);
-                }
-                fos.flush();//刷新缓存区
-                inputStream.close();
-                fos.close();
-                Log.e("", "copyAssetsDir2Phone: 文件复制完毕");
-            } else {
-                Log.e("", "copyAssetsDir2Phone: 文件已存在，无需复制");
+            FileOutputStream fos = new FileOutputStream(file);//如果文件不存在，FileOutputStream会自动创建文件
+            int len = -1;
+            byte[] buffer = new byte[1024];
+            while ((len = inputStream.read(buffer)) != -1) {
+                fos.write(buffer, 0, len);
             }
+            fos.flush();//刷新缓存区
+            inputStream.close();
+            fos.close();
+            Log.e("", "copyAssetsDir2Phone: 文件复制完毕");
+//            if (!file.exists() || file.length() == 0) {
+//                FileOutputStream fos = new FileOutputStream(file);//如果文件不存在，FileOutputStream会自动创建文件
+//                int len = -1;
+//                byte[] buffer = new byte[1024];
+//                while ((len = inputStream.read(buffer)) != -1) {
+//                    fos.write(buffer, 0, len);
+//                }
+//                fos.flush();//刷新缓存区
+//                inputStream.close();
+//                fos.close();
+//                Log.e("", "copyAssetsDir2Phone: 文件复制完毕");
+//            } else {
+//                Log.e("", "copyAssetsDir2Phone: 文件已存在，无需复制");
+//            }
         } catch (IOException e) {
             e.printStackTrace();
         }
@@ -412,22 +471,20 @@ public class MainActivity extends AppCompatActivity {
 
         /**
          * This method allows to get an item for the given key
+         *
          * @param key : the key to look for in the local storage
          * @return the item having the given key
          */
         @JavascriptInterface
-        public String getItem(String key)
-        {
+        public String getItem(String key) {
             String value = null;
-            if(key != null)
-            {
+            if (key != null) {
                 database = localStorageDBHelper.getReadableDatabase();
                 Cursor cursor = database.query(LocalStorage.LOCALSTORAGE_TABLE_NAME,
                         null,
                         LocalStorage.LOCALSTORAGE_ID + " = ?",
-                        new String [] {key},null, null, null);
-                if(cursor.moveToFirst())
-                {
+                        new String[]{key}, null, null, null);
+                if (cursor.moveToFirst()) {
                     value = cursor.getString(1);
                 }
                 cursor.close();
@@ -438,25 +495,21 @@ public class MainActivity extends AppCompatActivity {
 
         /**
          * set the value for the given key, or create the set of datas if the key does not exist already.
+         *
          * @param key
          * @param value
          */
         @JavascriptInterface
-        public void setItem(String key,String value)
-        {
-            if(key != null && value != null)
-            {
+        public void setItem(String key, String value) {
+            if (key != null && value != null) {
                 String oldValue = getItem(key);
                 database = localStorageDBHelper.getWritableDatabase();
                 ContentValues values = new ContentValues();
                 values.put(LocalStorage.LOCALSTORAGE_ID, key);
                 values.put(LocalStorage.LOCALSTORAGE_VALUE, value);
-                if(oldValue != null)
-                {
+                if (oldValue != null) {
                     database.update(LocalStorage.LOCALSTORAGE_TABLE_NAME, values, LocalStorage.LOCALSTORAGE_ID + "='" + key + "'", null);
-                }
-                else
-                {
+                } else {
                     database.insert(LocalStorage.LOCALSTORAGE_TABLE_NAME, null, values);
                 }
                 database.close();
@@ -465,13 +518,12 @@ public class MainActivity extends AppCompatActivity {
 
         /**
          * removes the item corresponding to the given key
+         *
          * @param key
          */
         @JavascriptInterface
-        public void removeItem(String key)
-        {
-            if(key != null)
-            {
+        public void removeItem(String key) {
+            if (key != null) {
                 database = localStorageDBHelper.getWritableDatabase();
                 database.delete(LocalStorage.LOCALSTORAGE_TABLE_NAME, LocalStorage.LOCALSTORAGE_ID + "='" + key + "'", null);
                 database.close();
@@ -482,8 +534,7 @@ public class MainActivity extends AppCompatActivity {
          * clears all the local storage.
          */
         @JavascriptInterface
-        public void clear()
-        {
+        public void clear() {
             database = localStorageDBHelper.getWritableDatabase();
             database.delete(LocalStorage.LOCALSTORAGE_TABLE_NAME, null, null);
             database.close();
