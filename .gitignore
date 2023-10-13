@@ -18,3 +18,4 @@ local.properties
 /app/libs/mobile.aar
 /app/libs/mobile-sources.jar
 /app/libs/ffmpeg-kit-full-gpl-6.0-2.aar
+/app/release/*
