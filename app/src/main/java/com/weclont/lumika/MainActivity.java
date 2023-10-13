@@ -2,6 +2,8 @@ package com.weclont.lumika;
 
 import android.annotation.SuppressLint;
 import android.app.Activity;
+import android.content.ClipData;
+import android.content.ClipboardManager;
 import android.content.ContentValues;
 import android.content.Context;
 import android.content.Intent;
@@ -9,7 +11,6 @@ import android.database.Cursor;
 import android.database.sqlite.SQLiteDatabase;
 import android.graphics.Color;
 import android.net.Uri;
-import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
@@ -18,9 +19,7 @@ import android.view.View;
 import android.webkit.JavascriptInterface;
 import android.webkit.ValueCallback;
 import android.webkit.WebChromeClient;
-import android.webkit.WebResourceError;
 import android.webkit.WebResourceRequest;
-import android.webkit.WebResourceResponse;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
@@ -47,9 +46,9 @@ public class MainActivity extends AppCompatActivity {
     private WVChromeClient wv = null;
     public ValueCallback<Uri[]> uploadFiles = null;
     private String themeColor = "#ffffff";
+    private String lastOneThemeColor = "#ffffff";
     private Handler handler;
     private Runnable colorCheckRunnable;
-    private String lastOneThemeColor = "#ffffff";
     private LumikaWebServer webServer;
     private int serverPort;
     private int serverBackendPort;
@@ -72,7 +71,7 @@ public class MainActivity extends AppCompatActivity {
                     lastOneThemeColor = currentThemeColor;
                 }
 
-                // 每隔200ms检查一次
+                // 每隔100ms检查一次
                 handler.postDelayed(this, 100);
             }
         };
@@ -108,6 +107,7 @@ public class MainActivity extends AppCompatActivity {
 
     @SuppressLint("SetJavaScriptEnabled")
     private void setWebViewUrl(int port) {
+        webView.addJavascriptInterface(new ClipboardInterface(), "ClipboardInterface");
         webView.addJavascriptInterface(new LocalStorageJavaScriptInterface(getApplicationContext()), "LocalStorage");
         LocalStorageJavaScriptInterface localStorageInterface = new LocalStorageJavaScriptInterface(MainActivity.this);
         localStorageInterface.setItem("Lumika_API", "http://localhost:" + serverBackendPort + "/ui/");
@@ -120,26 +120,10 @@ public class MainActivity extends AppCompatActivity {
 
         WebViewClient webViewClient = new WebViewClient() {
             @Override
-            public void onReceivedError(WebView view, WebResourceRequest request, WebResourceError error) {
-                Uri uri = request.getUrl();
-                if (uri != null && !uri.toString().contains("/api")) {
-                    webView.reload();
-                }
-            }
-
-            @Override
-            public void onReceivedHttpError(WebView view, WebResourceRequest request, WebResourceResponse errorResponse) {
-                Uri uri = request.getUrl();
-                if (uri != null && !uri.toString().contains("/api")) {
-                    webView.reload();
-                }
-            }
-
-            @Override
             public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
                 Uri url = request.getUrl();
 
-                if (url != null && url.toString().contains("github")) {
+                if (url != null && (url.toString().contains("github") || url.toString().contains("/dl/"))) {
                     Intent intent = new Intent(Intent.ACTION_VIEW, url);
                     view.getContext().startActivity(intent);
                     return true;
@@ -158,8 +142,23 @@ public class MainActivity extends AppCompatActivity {
                     setStatusBarColor(themeColor);
                 }
                 LocalStorageJavaScriptInterface localStorageInterface = new LocalStorageJavaScriptInterface(MainActivity.this);
-                localStorageInterface.setItem("Lumika_API", "http://localhost:7860/ui/");
             }
+//            // 目前不需要这些逻辑
+//            @Override
+//            public void onReceivedError(WebView view, WebResourceRequest request, WebResourceError error) {
+//                Uri uri = request.getUrl();
+//                if (uri != null && !uri.toString().contains("/api")) {
+//                    webView.reload();
+//                }
+//            }
+//
+//            @Override
+//            public void onReceivedHttpError(WebView view, WebResourceRequest request, WebResourceResponse errorResponse) {
+//                Uri uri = request.getUrl();
+//                if (uri != null && !uri.toString().contains("/api")) {
+//                    webView.reload();
+//                }
+//            }
         };
         webView.setWebViewClient(webViewClient);
 
@@ -169,6 +168,15 @@ public class MainActivity extends AppCompatActivity {
         // 延迟后加载页面
         Handler handler = new Handler(Looper.getMainLooper());
         handler.postDelayed(() -> loadWebView(port), 1);
+    }
+
+    @Override
+    public void onBackPressed() {
+        if (webView.canGoBack()) {
+            webView.goBack();
+        } else {
+            super.onBackPressed();
+        }
     }
 
     private String getThemeColorFromMetaTags(WebView webView) {
@@ -479,6 +487,15 @@ public class MainActivity extends AppCompatActivity {
             database = localStorageDBHelper.getWritableDatabase();
             database.delete(LocalStorage.LOCALSTORAGE_TABLE_NAME, null, null);
             database.close();
+        }
+    }
+
+    public class ClipboardInterface {
+        @JavascriptInterface
+        public void copyToClipboard(String text) {
+            ClipboardManager clipboard = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
+            ClipData clip = ClipData.newPlainText("lumika", text);
+            clipboard.setPrimaryClip(clip);
         }
     }
 
