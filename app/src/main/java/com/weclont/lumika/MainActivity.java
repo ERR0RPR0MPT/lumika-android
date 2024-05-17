@@ -23,6 +23,7 @@ import android.view.SurfaceControl;
 import android.view.SurfaceHolder;
 import android.view.SurfaceView;
 import android.view.View;
+import android.view.Window;
 import android.view.WindowManager;
 import android.webkit.JavascriptInterface;
 import android.webkit.ValueCallback;
@@ -44,6 +45,8 @@ import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.Arrays;
+import java.util.Comparator;
 import java.util.Objects;
 import java.util.Random;
 
@@ -51,7 +54,6 @@ import fi.iki.elonen.NanoHTTPD;
 
 public class MainActivity extends AppCompatActivity {
     private static final String TAG = "LumikaMainActivity";
-    private SurfaceView surfaceView;
     private WebView webView;
     private WVChromeClient wv = null;
     public ValueCallback<Uri[]> uploadFiles = null;
@@ -68,29 +70,18 @@ public class MainActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            surfaceView = findViewById(R.id.surfaceView);
-            surfaceView.getHolder().addCallback(new SurfaceHolder.Callback() {
-                @RequiresApi(api = Build.VERSION_CODES.R)
-                @Override
-                public void surfaceCreated(SurfaceHolder holder) {
-                    Surface surface = holder.getSurface();
-                    if (surface != null) {
-                        surface.setFrameRate(120.0f, Surface.FRAME_RATE_COMPATIBILITY_DEFAULT);
-                    }
-                }
+        Display.Mode[] modes = getWindow().getWindowManager().getDefaultDisplay().getSupportedModes();
+        Arrays.sort(modes, new Comparator<Display.Mode>() {
+            @Override
+            public int compare(Display.Mode mode1, Display.Mode mode2) {
+                return Float.compare(mode1.getRefreshRate(), mode2.getRefreshRate());
+            }
+        });
 
-                @Override
-                public void surfaceChanged(SurfaceHolder holder, int format, int width, int height) {
-                    // Surface 改变时的处理
-                }
-
-                @Override
-                public void surfaceDestroyed(SurfaceHolder holder) {
-                    // Surface 销毁时的处理
-                }
-            });
-        }
+        Window window = getWindow();
+        WindowManager.LayoutParams lp = window.getAttributes();
+        lp.preferredDisplayModeId = modes[modes.length - 1].getModeId();
+        window.setAttributes(lp);
 
         webView = findViewById(R.id.webView);
         webView.setLayerType(View.LAYER_TYPE_HARDWARE, null);
